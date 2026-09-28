@@ -93,4 +93,22 @@ public class InboxProcessorTests
         Assert.NotNull(stored.LastError);
         Assert.Equal(0, (await lab.GetLedgerOrderAsync(OrderId))!.ChargeCount);
     }
+
+    [Fact]
+    public async Task Event_that_keeps_crashing_fails_after_max_attempts()
+    {
+        await using var lab = new ReceiverFactory();
+        await lab.SendAndProcessAsync(TestEvents.Created(OrderId));
+        lab.Faults.Apply(new FaultSnapshot(FailNext: 0, SlowNext: 0, CrashNext: Backoff.MaxAttempts, DedupeOff: false));
+        var payment = TestEvents.Paid(OrderId);
+        await lab.SendAsync(payment);
+
+        for (var attempt = 1; attempt <= Backoff.MaxAttempts; attempt++)
+            await lab.ProcessInboxAsync();
+
+        var stored = await lab.GetInboxEventAsync(payment.Id);
+        Assert.Equal(InboxStatus.Failed, stored!.Status);
+        Assert.Equal(Backoff.MaxAttempts, stored.ProcessingAttempts);
+        Assert.Equal(0, (await lab.GetLedgerOrderAsync(OrderId))!.ChargeCount);
+    }
 }

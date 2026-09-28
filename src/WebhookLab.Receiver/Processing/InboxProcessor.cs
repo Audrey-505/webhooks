@@ -72,10 +72,20 @@ public sealed class InboxProcessor(
             // Leaving the try block disposed the uncommitted transaction, which rolled it back.
             db.ChangeTracker.Clear();
             logger.LogWarning(ex, "Processing {EventId} failed; it stays queued for retry", eventId);
+
+            // Poison message: an event that always throws (a handler bug, a persistent DB error, or a
+            // repeated injected crash) must not retry forever. Count this attempt and escalate to Failed
+            // once it hits the same cap deferred events face, instead of leaving it stuck at NextAttemptAt
+            // in the past and reprocessed every pass forever.
+            var attempts = inboxEvent.ProcessingAttempts + 1;
+            var status = attempts >= Backoff.MaxAttempts ? InboxStatus.Failed : InboxStatus.Received;
             await db.InboxEvents
                 .Where(e => e.EventId == eventId)
-                .ExecuteUpdateAsync(s => s.SetProperty(e => e.LastError, ex.Message), ct);
-            await notifier.ProcessingCompletedAsync(eventId, InboxStatus.Received, ex.Message);
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(e => e.LastError, ex.Message)
+                    .SetProperty(e => e.ProcessingAttempts, attempts)
+                    .SetProperty(e => e.Status, status), ct);
+            await notifier.ProcessingCompletedAsync(eventId, status, ex.Message);
             return;
         }
 
