@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -6,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
+using WebhookLab.Contracts;
 using WebhookLab.Receiver.Data;
 using WebhookLab.Receiver.Faults;
 
@@ -50,6 +53,29 @@ public sealed class ReceiverFactory : WebApplicationFactory<Program>
 
     public Task<LedgerOrder?> GetLedgerOrderAsync(int orderId) =>
         WithDbAsync(db => db.LedgerOrders.AsNoTracking().SingleOrDefaultAsync(o => o.OrderId == orderId));
+
+    /// <summary>Sends a webhook signed the way the Provider signs it. Overrides let tests forge or break it.</summary>
+    public Task<HttpResponseMessage> SendAsync(
+        WebhookEnvelope envelope,
+        string? secret = null,
+        DateTimeOffset? signedAt = null,
+        string? headerId = null,
+        CancellationToken ct = default)
+    {
+        var body = JsonSerializer.Serialize(envelope, WebhookJson.Options);
+        var id = headerId ?? envelope.Id;
+        var timestamp = (signedAt ?? Time.GetUtcNow()).ToUnixTimeSeconds();
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/webhooks")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Add(WebhookHeaders.Id, id);
+        request.Headers.Add(WebhookHeaders.Timestamp, timestamp.ToString());
+        request.Headers.Add(WebhookHeaders.Signature, WebhookSignature.Sign(secret ?? Secret, id, timestamp, body));
+
+        return CreateClient().SendAsync(request, ct);
+    }
 
     public override async ValueTask DisposeAsync()
     {
