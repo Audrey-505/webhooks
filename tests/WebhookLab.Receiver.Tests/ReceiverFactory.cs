@@ -91,6 +91,18 @@ public sealed class ReceiverFactory : WebApplicationFactory<Program>
         await ProcessInboxAsync();
     }
 
+    /// <summary>Polls until an event is in the inbox (for requests the client stopped waiting on).</summary>
+    public async Task WaitUntilStoredAsync(string eventId)
+    {
+        for (var i = 0; i < 200; i++)
+        {
+            if (await GetInboxEventAsync(eventId) is not null)
+                return;
+            await Task.Delay(10);
+        }
+        throw new TimeoutException($"{eventId} was never stored.");
+    }
+
     public override async ValueTask DisposeAsync()
     {
         await base.DisposeAsync();
