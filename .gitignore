@@ -1,0 +1,6 @@
+# Webhook Lab
+*.db
+*.db-shm
+*.db-wal
+.superpowers/
+.DS_Store
