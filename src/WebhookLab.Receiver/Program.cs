@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using WebhookLab.Receiver.Api;
 using WebhookLab.Receiver.Data;
 using WebhookLab.Receiver.Faults;
+using WebhookLab.Receiver.Processing;
 using WebhookLab.Receiver.Realtime;
 using WebhookLab.Receiver.Webhooks;
 
@@ -20,6 +21,12 @@ builder.Services.AddOptions<WebhookOptions>()
     .Validate(o => !string.IsNullOrWhiteSpace(o.Secret), "Webhook:Secret must be configured.")
     .ValidateOnStart();
 builder.Services.AddScoped<InboxStore>();
+builder.Services.AddSingleton<IWebhookEventHandler, OrderCreatedHandler>();
+builder.Services.AddSingleton<IWebhookEventHandler, PaymentSucceededHandler>();
+builder.Services.AddSingleton<IWebhookEventHandler, PaymentRefundedHandler>();
+builder.Services.AddScoped<InboxProcessor>();
+if (builder.Configuration.GetValue("Receiver:EnableBackgroundProcessing", true))
+    builder.Services.AddHostedService<InboxProcessorWorker>();
 builder.Services.AddSingleton<ReceiverNotifier>();
 builder.Services.AddSignalR().AddJsonProtocol(options =>
     options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));

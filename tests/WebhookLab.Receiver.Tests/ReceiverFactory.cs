@@ -11,6 +11,7 @@ using Microsoft.Extensions.Time.Testing;
 using WebhookLab.Contracts;
 using WebhookLab.Receiver.Data;
 using WebhookLab.Receiver.Faults;
+using WebhookLab.Receiver.Processing;
 
 namespace WebhookLab.Receiver.Tests;
 
@@ -75,6 +76,19 @@ public sealed class ReceiverFactory : WebApplicationFactory<Program>
         request.Headers.Add(WebhookHeaders.Signature, WebhookSignature.Sign(secret ?? Secret, id, timestamp, body));
 
         return CreateClient().SendAsync(request, ct);
+    }
+
+    /// <summary>Runs one pass of the inbox processor, like one tick of the background worker.</summary>
+    public async Task<int> ProcessInboxAsync()
+    {
+        using var scope = Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<InboxProcessor>().ProcessDueAsync();
+    }
+
+    public async Task SendAndProcessAsync(WebhookEnvelope envelope)
+    {
+        (await SendAsync(envelope)).EnsureSuccessStatusCode();
+        await ProcessInboxAsync();
     }
 
     public override async ValueTask DisposeAsync()
