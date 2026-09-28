@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
 using WebhookLab.Receiver.Data;
+using WebhookLab.Receiver.Faults;
 
 namespace WebhookLab.Receiver.Tests;
 
@@ -21,6 +22,8 @@ public sealed class ReceiverFactory : WebApplicationFactory<Program>
     private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"receiver-test-{Guid.NewGuid():N}.db");
 
     public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 9, 28, 10, 0, 0, TimeSpan.Zero));
+
+    public FaultSettings Faults => Services.GetRequiredService<FaultSettings>();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {

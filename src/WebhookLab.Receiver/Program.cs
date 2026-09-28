@@ -2,12 +2,17 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using WebhookLab.Receiver.Api;
 using WebhookLab.Receiver.Data;
+using WebhookLab.Receiver.Faults;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<ReceiverDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("Receiver")));
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(new FaultSettings
+{
+    SlowResponseDelay = builder.Configuration.GetValue("Receiver:SlowResponseDelay", TimeSpan.FromSeconds(6)),
+});
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
@@ -24,6 +29,7 @@ using (var scope = app.Services.CreateScope())
 
 app.UseCors();
 app.MapQueryEndpoints();
+app.MapLabControlEndpoints();
 
 app.Run();
 
