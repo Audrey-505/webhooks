@@ -40,7 +40,8 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
 
 var app = builder.Build();
 
-// A lab doesn't need migrations: create the schema if the database file is new.
+// A lab doesn't need migrations: create the schema if the database file is new. EnsureCreated never
+// alters an existing receiver.db, so after changing an entity's shape, delete the file and rerun.
 using (var scope = app.Services.CreateScope())
     scope.ServiceProvider.GetRequiredService<ReceiverDbContext>().Database.EnsureCreated();
 

@@ -69,6 +69,16 @@ public class WebhookEndpointTests
     }
 
     [Fact]
+    public async Task Missing_type_is_a_bad_request()
+    {
+        await using var lab = new ReceiverFactory();
+
+        var response = await lab.SendAsync(TestEvents.New("", 42));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task FailNext_fault_returns_500_without_storing()
     {
         await using var lab = new ReceiverFactory();

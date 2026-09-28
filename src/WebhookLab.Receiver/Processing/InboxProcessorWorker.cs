@@ -15,8 +15,10 @@ public sealed class InboxProcessorWorker(IServiceScopeFactory scopes, ILogger<In
                 using var scope = scopes.CreateScope();
                 await scope.ServiceProvider.GetRequiredService<InboxProcessor>().ProcessDueAsync(stoppingToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
+                // A stray OperationCanceledException not caused by shutdown (e.g. a query timeout)
+                // must not stop the host; only a real shutdown request should end this loop.
                 logger.LogError(ex, "Inbox processing pass failed; trying again next tick");
             }
         }

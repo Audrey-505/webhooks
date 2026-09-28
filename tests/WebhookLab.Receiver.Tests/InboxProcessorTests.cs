@@ -95,6 +95,32 @@ public class InboxProcessorTests
     }
 
     [Fact]
+    public async Task Undeserializable_payload_counts_an_attempt_instead_of_aborting_the_pass()
+    {
+        await using var lab = new ReceiverFactory();
+        var now = lab.Time.GetUtcNow().UtcDateTime;
+        await lab.WithDbAsync(db =>
+        {
+            db.InboxEvents.Add(new InboxEvent
+            {
+                EventId = "evt_bad_payload",
+                Type = EventTypes.PaymentSucceeded,
+                Payload = "not json",
+                ReceivedAt = now,
+                NextAttemptAt = now,
+            });
+            return db.SaveChangesAsync();
+        });
+
+        var exception = await Record.ExceptionAsync(() => lab.ProcessInboxAsync());
+
+        Assert.Null(exception);
+        var stored = await lab.GetInboxEventAsync("evt_bad_payload");
+        Assert.Equal(1, stored!.ProcessingAttempts);
+        Assert.NotNull(stored.LastError);
+    }
+
+    [Fact]
     public async Task Event_that_keeps_crashing_fails_after_max_attempts()
     {
         await using var lab = new ReceiverFactory();

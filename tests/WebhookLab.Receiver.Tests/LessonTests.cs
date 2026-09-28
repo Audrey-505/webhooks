@@ -1,4 +1,5 @@
 using System.Net;
+using Microsoft.EntityFrameworkCore;
 using WebhookLab.Receiver.Data;
 using WebhookLab.Receiver.Faults;
 
@@ -90,6 +91,18 @@ public class LessonTests
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Null(await lab.GetInboxEventAsync(forged.Id));
+    }
+
+    [Fact]
+    public async Task Five_copies_at_once_are_stored_once()
+    {
+        await using var lab = new ReceiverFactory();
+        var created = TestEvents.Created(OrderId);
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => lab.SendAsync(created)));
+
+        Assert.All(responses, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+        Assert.Equal(1, await lab.WithDbAsync(db => db.InboxEvents.CountAsync(e => e.EventId == created.Id)));
     }
 
     [Fact]

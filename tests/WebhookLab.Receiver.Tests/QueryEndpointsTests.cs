@@ -17,4 +17,16 @@ public class QueryEndpointsTests
         Assert.NotNull(items);
         Assert.Empty(items);
     }
+
+    [Fact]
+    public async Task Inbox_receivedAt_is_serialized_as_UTC()
+    {
+        await using var lab = new ReceiverFactory();
+        await lab.SendAsync(TestEvents.Created(42));
+
+        var items = await lab.CreateClient().GetFromJsonAsync<List<JsonElement>>("/api/inbox");
+
+        var receivedAt = items![0].GetProperty("receivedAt").GetString();
+        Assert.EndsWith("Z", receivedAt);
+    }
 }

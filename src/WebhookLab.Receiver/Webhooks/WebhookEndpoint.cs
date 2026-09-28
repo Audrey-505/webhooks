@@ -28,6 +28,8 @@ public static class WebhookEndpoint
         TimeProvider time,
         ReceiverNotifier notifier)
     {
+        // Read as text and HMAC the decoded string below; production verifiers usually HMAC the raw
+        // request bytes instead, which avoids any risk of re-encoding changing the signed content.
         using var reader = new StreamReader(request.Body);
         var body = await reader.ReadToEndAsync();
         var eventId = request.Headers[WebhookHeaders.Id].ToString();
@@ -52,7 +54,7 @@ public static class WebhookEndpoint
         }
 
         var envelope = TryParse(body);
-        if (envelope is null || envelope.Id != eventId || envelope.Data is null)
+        if (envelope is null || envelope.Id != eventId || envelope.Data is null || string.IsNullOrEmpty(envelope.Type))
             return Results.BadRequest("Body must be a webhook envelope whose id matches the webhook-id header.");
 
         StoreResult result;

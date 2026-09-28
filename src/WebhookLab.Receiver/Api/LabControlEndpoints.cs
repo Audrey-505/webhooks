@@ -18,8 +18,11 @@ public static class LabControlEndpoints
 
         app.MapPost("/api/reset", async (ReceiverDbContext db, FaultSettings faults) =>
         {
+            // One transaction so a reset can't be observed half-done (inbox cleared, ledger not yet).
+            await using var transaction = await db.Database.BeginTransactionAsync();
             await db.InboxEvents.ExecuteDeleteAsync();
             await db.LedgerOrders.ExecuteDeleteAsync();
+            await transaction.CommitAsync();
             faults.Reset();
             return Results.NoContent();
         });

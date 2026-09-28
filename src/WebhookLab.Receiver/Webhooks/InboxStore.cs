@@ -47,7 +47,9 @@ public sealed class InboxStore(ReceiverDbContext db, TimeProvider time)
         if (!reprocessDuplicates)
             return StoreResult.Duplicate;
 
-        // UNSAFE lab mode: queue the already-stored event again, so it gets applied twice.
+        // UNSAFE lab mode: queue the already-stored event again, so it gets applied twice. This
+        // check-then-update can race with InboxProcessor picking the row up between the two, so a
+        // requeue may occasionally be lost — acceptable here since the whole point is showing the bug.
         await db.InboxEvents
             .Where(e => e.EventId == envelope.Id)
             .ExecuteUpdateAsync(s => s

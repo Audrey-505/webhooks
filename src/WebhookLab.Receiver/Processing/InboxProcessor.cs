@@ -40,7 +40,10 @@ public sealed class InboxProcessor(
     private async Task ProcessOneAsync(string eventId, CancellationToken ct)
     {
         db.ChangeTracker.Clear();
-        var inboxEvent = await db.InboxEvents.SingleAsync(e => e.EventId == eventId, ct);
+        // POST /api/reset can delete the row between the due-list query and this load; nothing left to do.
+        var inboxEvent = await db.InboxEvents.SingleOrDefaultAsync(e => e.EventId == eventId, ct);
+        if (inboxEvent is null)
+            return;
 
         if (!_handlers.TryGetValue(inboxEvent.Type, out var handler))
         {
@@ -51,10 +54,13 @@ public sealed class InboxProcessor(
             return;
         }
 
-        var data = JsonSerializer.Deserialize<WebhookEnvelope>(inboxEvent.Payload, WebhookJson.Options)!.Data;
-
+        OrderEventData data;
         try
         {
+            // Deserializing here too: a corrupted/unparsable payload is handled by the same catch below
+            // (counts an attempt, eventually Failed) instead of throwing before the try and aborting
+            // every remaining due event in this pass.
+            data = JsonSerializer.Deserialize<WebhookEnvelope>(inboxEvent.Payload, WebhookJson.Options)!.Data;
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
             var result = await handler.HandleAsync(data, db, ct);
@@ -70,8 +76,9 @@ public sealed class InboxProcessor(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Leaving the try block disposed the uncommitted transaction, which rolled it back.
+            // A crashed Deferred event goes back to Received (not back to Deferred) on purpose: it's
+            // still due, and re-deriving whatever made it Deferred is unnecessary complexity for a lab.
             db.ChangeTracker.Clear();
-            logger.LogWarning(ex, "Processing {EventId} failed; it stays queued for retry", eventId);
 
             // Poison message: an event that always throws (a handler bug, a persistent DB error, or a
             // repeated injected crash) must not retry forever. Count this attempt and escalate to Failed
@@ -79,6 +86,11 @@ public sealed class InboxProcessor(
             // in the past and reprocessed every pass forever.
             var attempts = inboxEvent.ProcessingAttempts + 1;
             var status = attempts >= Backoff.MaxAttempts ? InboxStatus.Failed : InboxStatus.Received;
+            if (status == InboxStatus.Failed)
+                logger.LogError(ex, "Processing {EventId} failed {Max} times; marked Failed", eventId, Backoff.MaxAttempts);
+            else
+                logger.LogWarning(ex, "Processing {EventId} failed (attempt {Attempt}/{Max}); retrying next pass", eventId, attempts, Backoff.MaxAttempts);
+
             await db.InboxEvents
                 .Where(e => e.EventId == eventId)
                 .ExecuteUpdateAsync(s => s

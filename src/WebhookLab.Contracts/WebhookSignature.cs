@@ -7,6 +7,9 @@ namespace WebhookLab.Contracts;
 /// HMAC-SHA256 webhook signatures. The sender signs "{id}.{timestamp}.{body}" with a shared
 /// secret; the receiver recomputes it to prove the request is genuine and unmodified.
 /// Including the timestamp lets the receiver reject old requests replayed by an attacker.
+/// This follows the Standard Webhooks header/signature *format* only. Real Standard Webhooks also
+/// base64-decodes a `whsec_`-prefixed secret before using it, and accepts multiple space-separated
+/// signatures on one request so a sender can rotate keys without a flag day.
 /// </summary>
 public static class WebhookSignature
 {

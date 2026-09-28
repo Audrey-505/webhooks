@@ -2176,7 +2176,7 @@ Expected:
 - The inbox has 2 events, both `"status":"Processed"`.
 - The wrong-secret send returns `HTTP/1.1 401 Unauthorized`.
 
-Run `curl -X POST http://localhost:5002/api/reset`, then stop the Receiver (Ctrl+C). The database file `receiver.db` is created in the directory you ran `dotnet run` from (the repo root here). Open it in DB Browser for SQLite to see the `InboxEvents` and `LedgerOrders` tables. It is git-ignored.
+Run `curl -X POST http://localhost:5002/api/reset`, then stop the Receiver (Ctrl+C). The database file `receiver.db` is created relative to the working directory `dotnet run` was launched from: with `dotnet run --project src/WebhookLab.Receiver` (as used throughout this plan) that's `src/WebhookLab.Receiver/`, not the repo root. Open it in DB Browser for SQLite to see the `InboxEvents` and `LedgerOrders` tables. It is git-ignored.
 
 - [ ] **Step 7: Commit**
 
