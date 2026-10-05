@@ -487,3 +487,4 @@ $RECYCLE.BIN/
 *.db-wal
 .superpowers/
 .DS_Store
+docs/LEARNINGS.md
