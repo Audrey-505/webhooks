@@ -48,6 +48,7 @@ app.UseCors();
 app.MapQueryEndpoints();
 app.MapLabControlEndpoints();
 app.MapOrderEndpoints();
+app.MapEventEndpoints();
 app.MapHub<ProviderHub>("/hubs/provider");
 
 app.Run();
