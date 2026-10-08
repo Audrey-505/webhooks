@@ -23,6 +23,9 @@ builder.Services.AddOptions<WebhookOptions>()
     .ValidateOnStart();
 builder.Services.AddHttpClient<WebhookSender>((services, client) =>
     client.Timeout = services.GetRequiredService<IOptions<WebhookOptions>>().Value.Timeout);
+builder.Services.AddScoped<DeliveryDispatcher>();
+if (builder.Configuration.GetValue("Provider:EnableBackgroundDispatch", true))
+    builder.Services.AddHostedService<DeliveryDispatcherWorker>();
 builder.Services.AddSingleton<ProviderNotifier>();
 builder.Services.AddSignalR().AddJsonProtocol(options =>
     options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));

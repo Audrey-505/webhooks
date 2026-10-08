@@ -5,12 +5,14 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
 using WebhookLab.Provider.Api;
 using WebhookLab.Provider.Chaos;
 using WebhookLab.Provider.Data;
+using WebhookLab.Provider.Dispatch;
 
 namespace WebhookLab.Provider.Tests;
 
@@ -31,6 +33,7 @@ public sealed class ProviderFactory : WebApplicationFactory<Program>
     private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"provider-test-{Guid.NewGuid():N}.db");
 
     public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 10, 8, 10, 0, 0, TimeSpan.Zero));
+    public FakeReceiver Receiver { get; } = new();
 
     public ChaosSettings Chaos => Services.GetRequiredService<ChaosSettings>();
     public ReorderBuffer Reorder => Services.GetRequiredService<ReorderBuffer>();
@@ -46,6 +49,11 @@ public sealed class ProviderFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Time);
+
+            // Every webhook the Provider sends lands in the FakeReceiver instead of the network.
+            services.AddHttpClient<WebhookSender>()
+                .ConfigurePrimaryHttpMessageHandler(() => Receiver)
+                .SetHandlerLifetime(Timeout.InfiniteTimeSpan);
         });
     }
 
@@ -68,6 +76,20 @@ public sealed class ProviderFactory : WebApplicationFactory<Program>
         using var scope = Services.CreateScope();
         return await query(scope.ServiceProvider.GetRequiredService<ProviderDbContext>());
     }
+
+    /// <summary>Runs one pass of the dispatcher, like one tick of the background worker.</summary>
+    public async Task<int> DispatchAsync()
+    {
+        using var scope = Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<DeliveryDispatcher>().DispatchDueAsync();
+    }
+
+    public Task<List<Delivery>> GetDeliveriesAsync(string eventId) =>
+        WithDbAsync(db => db.Deliveries.AsNoTracking()
+            .Include(d => d.Attempts.OrderBy(a => a.Id))
+            .Where(d => d.EventId == eventId)
+            .OrderBy(d => d.Id)
+            .ToListAsync());
 
     public override async ValueTask DisposeAsync()
     {
