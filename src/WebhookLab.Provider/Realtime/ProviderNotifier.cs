@@ -13,9 +13,9 @@ public sealed class ProviderNotifier(IHubContext<ProviderHub> hub, TimeProvider 
         hub.Clients.All.SendAsync("AttemptStarted", new AttemptStartedMessage(
             delivery.EventId, time.GetUtcNow(), delivery.Id, attemptNumber, delivery.IsReplay, isDuplicateSend));
 
-    public Task AttemptCompletedAsync(Delivery delivery, int attemptNumber, int? statusCode, string? error, long durationMs) =>
+    public Task AttemptCompletedAsync(Delivery delivery, int attemptNumber, int? statusCode, string? error, long durationMs, bool isDuplicateSend) =>
         hub.Clients.All.SendAsync("AttemptCompleted", new AttemptCompletedMessage(
-            delivery.EventId, time.GetUtcNow(), delivery.Id, attemptNumber, statusCode, error, durationMs));
+            delivery.EventId, time.GetUtcNow(), delivery.Id, attemptNumber, statusCode, error, durationMs, isDuplicateSend));
 
     public Task DeliveryStatusChangedAsync(Delivery delivery) =>
         hub.Clients.All.SendAsync("DeliveryStatusChanged", new DeliveryStatusChangedMessage(

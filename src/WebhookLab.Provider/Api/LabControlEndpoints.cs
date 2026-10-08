@@ -16,10 +16,15 @@ public static class LabControlEndpoints
             return chaos.Snapshot();
         });
 
-        app.MapPost("/api/reset", async (ProviderDbContext db, ChaosSettings chaos, ReorderBuffer reorder) =>
+        app.MapPost("/api/reset", async (ProviderDbContext db, ChaosSettings chaos, ReorderBuffer reorder, ResetSignal resetSignal) =>
         {
-            // One transaction so a reset can't be observed half-done. Children before parents:
-            // SQLite enforces the foreign keys (attempts → deliveries → events).
+            // Cancel any delivery in flight first: the dispatcher is linked to this signal and bails
+            // out on its own, so the deletes below never race a send or a SaveChanges for that row.
+            resetSignal.Trigger();
+
+            // One transaction so a reset can't be observed half-done. Children before parents is just
+            // for clarity here — SQLite's required FKs (attempts → deliveries → events) would cascade
+            // the deletes either way.
             await using var transaction = await db.Database.BeginTransactionAsync();
             await db.DeliveryAttempts.ExecuteDeleteAsync();
             await db.Deliveries.ExecuteDeleteAsync();

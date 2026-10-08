@@ -10,7 +10,10 @@ public sealed class Delivery
     public required string EventId { get; init; }
     public DeliveryStatus Status { get; set; } = DeliveryStatus.Pending;
 
-    /// <summary>Attempts made so far, including the one that succeeded.</summary>
+    /// <summary>
+    /// Attempts made so far, including the one that succeeded. A DuplicateNext copy shares its
+    /// original attempt's number (see DeliveryAttempt.AttemptNumber) and is not counted here.
+    /// </summary>
     public int AttemptCount { get; set; }
 
     public DateTime NextAttemptAt { get; set; }

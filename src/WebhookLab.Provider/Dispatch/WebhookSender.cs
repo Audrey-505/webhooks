@@ -14,7 +14,8 @@ public sealed record SendResult(int? StatusCode, string? Error, long DurationMs)
 /// <summary>
 /// Signs and POSTs one webhook. Delivery problems never throw: a timeout, a refused connection and
 /// a 500 all come back as a SendResult, because to the dispatcher they mean the same thing —
-/// "not delivered, retry later".
+/// "not delivered, retry later". The one thing that does propagate as an exception is the caller's
+/// own cancellation (host shutdown, or a reset — this class can't tell them apart and doesn't try).
 /// </summary>
 public sealed class WebhookSender(HttpClient http, IOptions<WebhookOptions> options, TimeProvider time)
 {

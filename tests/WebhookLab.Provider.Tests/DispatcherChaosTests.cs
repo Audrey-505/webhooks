@@ -67,10 +67,13 @@ public class DispatcherChaosTests
         var order = await lab.CreateOrderAsync();
         await lab.DispatchAsync();
 
+        Assert.Empty(lab.Receiver.Received); // still held...
+        Assert.True(lab.Reorder.HasHeld);
+
         lab.Chaos.Reset();
         await lab.DispatchAsync();
 
-        Assert.Equal(order.EventId, Assert.Single(lab.Receiver.Received).Id);
+        Assert.Equal(order.EventId, Assert.Single(lab.Receiver.Received).Id); // ...then released
     }
 
     [Fact]
@@ -85,6 +88,23 @@ public class DispatcherChaosTests
 
         Assert.True(stopwatch.Elapsed >= TimeSpan.FromSeconds(1));
         Assert.Single(lab.Receiver.Received);
+    }
+
+    [Fact]
+    public async Task Reset_during_the_chaos_delay_cancels_the_in_flight_send()
+    {
+        await using var lab = new ProviderFactory();
+        lab.Chaos.Apply(new ChaosSnapshot(DuplicateNext: 0, DelaySeconds: 1, ReorderNext: 0, BadSignatureNext: 0));
+        await lab.CreateOrderAsync();
+
+        var dispatch = lab.DispatchAsync();
+        await Task.Delay(TimeSpan.FromMilliseconds(200));
+        var reset = await lab.CreateClient().PostAsync("/api/reset", null);
+
+        await dispatch;
+
+        reset.EnsureSuccessStatusCode();
+        Assert.Empty(lab.Receiver.Received);
     }
 
     [Fact]

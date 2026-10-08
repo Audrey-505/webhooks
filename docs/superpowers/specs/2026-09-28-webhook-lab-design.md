@@ -232,7 +232,7 @@ Both hubs push small, flat messages that all carry `eventId` and `at` (timestamp
 |---|---|---|
 | Provider | `EventCreated` | `type`, `orderId` |
 | Provider | `AttemptStarted` | `deliveryId`, `attemptNumber`, `isReplay`, `isDuplicateSend` |
-| Provider | `AttemptCompleted` | `deliveryId`, `attemptNumber`, `statusCode?`, `error?`, `durationMs` |
+| Provider | `AttemptCompleted` | `deliveryId`, `attemptNumber`, `statusCode?`, `error?`, `durationMs`, `isDuplicateSend` |
 | Provider | `DeliveryStatusChanged` | `deliveryId`, `status`, `nextAttemptAt?` |
 | Receiver | `WebhookReceived` | `outcome` (`Stored` / `Duplicate` / `DuplicateReprocessed` / `Rejected` / `FaultInjected`) |
 | Receiver | `ProcessingCompleted` | `status` (`Processed` / `Deferred` / `Failed`, or `Received` after a crash rollback), `error?` |

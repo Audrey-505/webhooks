@@ -29,11 +29,12 @@ public sealed class OrderService(ProviderDbContext db, TimeProvider time, Provid
         db.Orders.Add(order);
         await db.SaveChangesAsync(); // assigns order.Id, which the event payload needs
 
-        var webhookEvent = AddEventWithDelivery(EventTypes.OrderCreated, order);
+        var (webhookEvent, delivery) = AddEventWithDelivery(EventTypes.OrderCreated, order);
         await db.SaveChangesAsync();
         await transaction.CommitAsync();
 
         await notifier.EventCreatedAsync(webhookEvent, order.Id);
+        await notifier.DeliveryStatusChangedAsync(delivery);
         return new OrderActionResult(OrderActionStatus.Done, order, webhookEvent.Id);
     }
 
@@ -54,15 +55,16 @@ public sealed class OrderService(ProviderDbContext db, TimeProvider time, Provid
             return new OrderActionResult(OrderActionStatus.InvalidState, order);
 
         order.Status = to;
-        var webhookEvent = AddEventWithDelivery(eventType, order);
+        var (webhookEvent, delivery) = AddEventWithDelivery(eventType, order);
         await db.SaveChangesAsync();
         await transaction.CommitAsync();
 
         await notifier.EventCreatedAsync(webhookEvent, order.Id);
+        await notifier.DeliveryStatusChangedAsync(delivery);
         return new OrderActionResult(OrderActionStatus.Done, order, webhookEvent.Id);
     }
 
-    private WebhookEvent AddEventWithDelivery(string type, Order order)
+    private (WebhookEvent Event, Delivery Delivery) AddEventWithDelivery(string type, Order order)
     {
         var now = time.GetUtcNow();
         var envelope = new WebhookEnvelope($"evt_{Guid.NewGuid():N}", type, now, new OrderEventData(order.Id, order.Amount));
@@ -74,7 +76,8 @@ public sealed class OrderService(ProviderDbContext db, TimeProvider time, Provid
             CreatedAt = now.UtcDateTime,
         };
         db.Events.Add(webhookEvent);
-        db.Deliveries.Add(new Delivery { EventId = webhookEvent.Id, NextAttemptAt = now.UtcDateTime, CreatedAt = now.UtcDateTime });
-        return webhookEvent;
+        var delivery = new Delivery { EventId = webhookEvent.Id, NextAttemptAt = now.UtcDateTime, CreatedAt = now.UtcDateTime };
+        db.Deliveries.Add(delivery);
+        return (webhookEvent, delivery);
     }
 }

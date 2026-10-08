@@ -31,6 +31,17 @@ public class ChaosTests
     }
 
     [Fact]
+    public void DelaySeconds_above_60_is_clamped_to_60()
+    {
+        var chaos = new ChaosSettings();
+
+        chaos.Apply(new ChaosSnapshot(DuplicateNext: 0, DelaySeconds: 999, ReorderNext: 0, BadSignatureNext: 0));
+
+        Assert.Equal(60, chaos.Snapshot().DelaySeconds);
+        Assert.Equal(TimeSpan.FromSeconds(60), chaos.Delay);
+    }
+
+    [Fact]
     public void Reorder_buffer_releases_newest_first_and_empties()
     {
         var reorder = new ReorderBuffer();

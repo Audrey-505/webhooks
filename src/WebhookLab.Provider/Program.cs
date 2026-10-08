@@ -15,11 +15,13 @@ builder.Services.AddDbContext<ProviderDbContext>(options =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ChaosSettings>();
 builder.Services.AddSingleton<ReorderBuffer>();
+builder.Services.AddSingleton<ResetSignal>();
 builder.Services.AddScoped<OrderService>();
 builder.Services.AddOptions<WebhookOptions>()
     .Bind(builder.Configuration.GetSection(WebhookOptions.SectionName))
     .Validate(o => !string.IsNullOrWhiteSpace(o.Secret), "Webhook:Secret must be configured.")
     .Validate(o => Uri.IsWellFormedUriString(o.TargetUrl, UriKind.Absolute), "Webhook:TargetUrl must be an absolute URL.")
+    .Validate(o => o.Timeout > TimeSpan.Zero, "Webhook:Timeout must be greater than zero.")
     .ValidateOnStart();
 builder.Services.AddHttpClient<WebhookSender>((services, client) =>
     client.Timeout = services.GetRequiredService<IOptions<WebhookOptions>>().Value.Timeout);

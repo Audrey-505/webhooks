@@ -16,10 +16,15 @@ public sealed class DeliveryDispatcher(
     WebhookSender sender,
     ChaosSettings chaos,
     ReorderBuffer reorder,
+    ResetSignal resetSignal,
     TimeProvider time,
     ProviderNotifier notifier)
 {
-    /// <summary>Sends every due delivery, oldest first. Returns how many were sent.</summary>
+    /// <summary>
+    /// Sends every due delivery, oldest first; deliveries held back by ReorderNext are released
+    /// newest-first once the last one is collected (or reorder is switched off). Returns how many
+    /// sends actually happened.
+    /// </summary>
     public async Task<int> DispatchDueAsync(CancellationToken ct = default)
     {
         var now = time.GetUtcNow().UtcDateTime;
@@ -42,8 +47,8 @@ public sealed class DeliveryDispatcher(
                 continue;
             }
 
-            await DeliverAsync(delivery.Id, ct);
-            sent++;
+            if (await DeliverAsync(delivery.Id, ct))
+                sent++;
         }
 
         // ...and once the last one is collected (or reorder was switched off), send them all newest-first.
@@ -51,35 +56,57 @@ public sealed class DeliveryDispatcher(
         {
             foreach (var deliveryId in reorder.ReleaseReversed())
             {
-                await DeliverAsync(deliveryId, ct);
-                sent++;
+                if (await DeliverAsync(deliveryId, ct))
+                    sent++;
             }
         }
 
         return sent;
     }
 
-    private async Task DeliverAsync(int deliveryId, CancellationToken ct)
+    /// <summary>Returns true only when a send actually happened (false for a skipped or reset-cancelled delivery).</summary>
+    private async Task<bool> DeliverAsync(int deliveryId, CancellationToken ct)
     {
-        db.ChangeTracker.Clear();
-        // POST /api/reset can delete the row between the due-list query and this load; nothing left to do.
-        var delivery = await db.Deliveries.SingleOrDefaultAsync(d => d.Id == deliveryId, ct);
-        if (delivery is not { Status: DeliveryStatus.Pending })
-            return;
-        var webhookEvent = await db.Events.AsNoTracking().SingleAsync(e => e.Id == delivery.EventId, ct);
+        // Captured once, up front: if POST /api/reset fires anywhere below, this token (linked into
+        // every delay/send/load) cancels and we bail without saving or notifying further. It is NOT
+        // full protection against every race (e.g. a concurrent non-reset delete), just this one.
+        var resetToken = resetSignal.Token;
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, resetToken);
+        try
+        {
+            db.ChangeTracker.Clear();
+            // POST /api/reset can delete the row between the due-list query and this load; nothing left to do.
+            var delivery = await db.Deliveries.SingleOrDefaultAsync(d => d.Id == deliveryId, linked.Token);
+            if (delivery is not { Status: DeliveryStatus.Pending })
+                return false;
+            var webhookEvent = await db.Events.AsNoTracking().SingleOrDefaultAsync(e => e.Id == delivery.EventId, linked.Token);
+            if (webhookEvent is null)
+                return false;
 
-        if (chaos.Delay > TimeSpan.Zero)
-            await Task.Delay(chaos.Delay, ct);
+            if (chaos.Delay > TimeSpan.Zero)
+                await Task.Delay(chaos.Delay, linked.Token);
 
-        // No database transaction is open here: never hold one across a network call that can take seconds.
-        var attemptNumber = delivery.AttemptCount + 1;
-        var result = await SendAndRecordAsync(delivery, webhookEvent, attemptNumber, isDuplicateSend: false, ct);
-        if (chaos.TryConsumeDuplicate())
-            await SendAndRecordAsync(delivery, webhookEvent, attemptNumber, isDuplicateSend: true, ct);
+            // No database transaction is open here: never hold one across a network call that can take seconds.
+            var attemptNumber = delivery.AttemptCount + 1;
+            var result = await SendAndRecordAsync(delivery, webhookEvent, attemptNumber, isDuplicateSend: false, linked.Token);
+            if (chaos.TryConsumeDuplicate())
+                await SendAndRecordAsync(delivery, webhookEvent, attemptNumber, isDuplicateSend: true, linked.Token);
 
-        RecordOutcome(delivery, result);
-        await db.SaveChangesAsync(ct);
-        await notifier.DeliveryStatusChangedAsync(delivery);
+            if (resetToken.IsCancellationRequested)
+                return false; // reset fired right after the send: the row may already be gone, leave it alone
+
+            RecordOutcome(delivery, result);
+            await db.SaveChangesAsync(ct);
+            await notifier.DeliveryStatusChangedAsync(delivery);
+            return true;
+        }
+        catch (OperationCanceledException) when (resetToken.IsCancellationRequested)
+        {
+            // Reset fired mid-delay or mid-send. The row this delivery pointed at may already be
+            // gone (or belong to a fresh lab run); don't save or push any more notifications for it.
+            // Our own shutdown is a *different* cancellation (ct, not resetToken) and still propagates.
+            return false;
+        }
     }
 
     private async Task<SendResult> SendAndRecordAsync(
@@ -100,7 +127,7 @@ public sealed class DeliveryDispatcher(
             StatusCode = result.StatusCode,
             Error = result.Error,
         });
-        await notifier.AttemptCompletedAsync(delivery, attemptNumber, result.StatusCode, result.Error, result.DurationMs);
+        await notifier.AttemptCompletedAsync(delivery, attemptNumber, result.StatusCode, result.Error, result.DurationMs, isDuplicateSend);
         return result;
     }
 

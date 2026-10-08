@@ -9,7 +9,8 @@ public sealed record AttemptStartedMessage(
     string EventId, DateTimeOffset At, int DeliveryId, int AttemptNumber, bool IsReplay, bool IsDuplicateSend);
 
 public sealed record AttemptCompletedMessage(
-    string EventId, DateTimeOffset At, int DeliveryId, int AttemptNumber, int? StatusCode, string? Error, long DurationMs);
+    string EventId, DateTimeOffset At, int DeliveryId, int AttemptNumber, int? StatusCode, string? Error, long DurationMs,
+    bool IsDuplicateSend);
 
 public sealed record DeliveryStatusChangedMessage(
     string EventId, DateTimeOffset At, int DeliveryId, DeliveryStatus Status, DateTime? NextAttemptAt);
