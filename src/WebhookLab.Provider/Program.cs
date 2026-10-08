@@ -1,8 +1,10 @@
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using WebhookLab.Provider.Api;
 using WebhookLab.Provider.Chaos;
 using WebhookLab.Provider.Data;
+using WebhookLab.Provider.Dispatch;
 using WebhookLab.Provider.Orders;
 using WebhookLab.Provider.Realtime;
 
@@ -14,6 +16,13 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ChaosSettings>();
 builder.Services.AddSingleton<ReorderBuffer>();
 builder.Services.AddScoped<OrderService>();
+builder.Services.AddOptions<WebhookOptions>()
+    .Bind(builder.Configuration.GetSection(WebhookOptions.SectionName))
+    .Validate(o => !string.IsNullOrWhiteSpace(o.Secret), "Webhook:Secret must be configured.")
+    .Validate(o => Uri.IsWellFormedUriString(o.TargetUrl, UriKind.Absolute), "Webhook:TargetUrl must be an absolute URL.")
+    .ValidateOnStart();
+builder.Services.AddHttpClient<WebhookSender>((services, client) =>
+    client.Timeout = services.GetRequiredService<IOptions<WebhookOptions>>().Value.Timeout);
 builder.Services.AddSingleton<ProviderNotifier>();
 builder.Services.AddSignalR().AddJsonProtocol(options =>
     options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
