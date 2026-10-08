@@ -1,10 +1,12 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/WebhookLab.Contracts/WebhookLab.Contracts.csproj" />
+    <Project Path="src/WebhookLab.Provider/WebhookLab.Provider.csproj" />
     <Project Path="src/WebhookLab.Receiver/WebhookLab.Receiver.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/WebhookLab.Contracts.Tests/WebhookLab.Contracts.Tests.csproj" />
+    <Project Path="tests/WebhookLab.Provider.Tests/WebhookLab.Provider.Tests.csproj" />
     <Project Path="tests/WebhookLab.Receiver.Tests/WebhookLab.Receiver.Tests.csproj" />
   </Folder>
 </Solution>
