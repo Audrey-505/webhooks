@@ -116,15 +116,15 @@ Follows the [Standard Webhooks](https://www.standardwebhooks.com/) header conven
 |---|---|
 | `Orders` | `Id`, `Amount`, `Status` (`Created` / `Paid` / `Refunded`) |
 | `Events` | `Id` (evt_…), `Type`, `Payload` (JSON), `CreatedAt` |
-| `Deliveries` | `Id`, `EventId`, `Status` (`Pending` / `Succeeded` / `Dead`), `AttemptCount`, `NextAttemptAt`, `IsReplay` |
-| `DeliveryAttempts` | `Id`, `DeliveryId`, `AttemptNumber`, `StartedAt`, `DurationMs`, `StatusCode` (nullable), `Error` (nullable) |
+| `Deliveries` | `Id`, `EventId`, `Status` (`Pending` / `Succeeded` / `Dead`), `AttemptCount` (attempts made so far, including the successful one), `NextAttemptAt`, `IsReplay`, `CreatedAt` |
+| `DeliveryAttempts` | `Id`, `DeliveryId`, `AttemptNumber`, `IsDuplicateSend`, `StartedAt`, `DurationMs`, `StatusCode` (nullable), `Error` (nullable) |
 
 ### Flow
 
 1. An order action (`create` / `pay` / `refund`) runs in **one transaction**: update `Orders`, insert `Events`, insert a `Pending` `Delivery` with `NextAttemptAt = now`.
 2. `DeliveryDispatcher` (`BackgroundService`) runs every 1 s and loads `Pending` deliveries with `NextAttemptAt <= now`, oldest first.
 3. For each delivery it applies chaos, signs, POSTs to `Webhook:TargetUrl` with a **5 s timeout**, and records a `DeliveryAttempt`.
-4. On `2xx` → `Succeeded`. On anything else (any non-2xx status, timeout, connection error) → `AttemptCount++`. If `AttemptCount >= 5` → `Dead`; otherwise `NextAttemptAt = now + 2^AttemptCount s + jitter(0–500 ms)`.
+4. Every attempt → `AttemptCount++`. On `2xx` → `Succeeded`. On anything else (any non-2xx status, timeout, connection error): if `AttemptCount >= 5` → `Dead`; otherwise `NextAttemptAt = now + 2^AttemptCount s + jitter(0–500 ms)`. The HTTP call is never made inside a database transaction.
 5. Every state change is pushed to `ProviderHub`.
 
 Backoff calculation lives in the small `Backoff` class in `WebhookLab.Contracts`, shared with the Receiver's deferred-event retries. Time comes from an injected `TimeProvider` so tests control the clock.
@@ -150,6 +150,7 @@ Counters decrement as they are used, so each toggle is a one-shot unless set aga
 
 | Method | Path | Purpose |
 |---|---|---|
+| GET | `/api/orders` | List orders (the dashboard needs them to offer pay/refund) |
 | POST | `/api/orders` | Create an order (`amount`) |
 | POST | `/api/orders/{id}/pay` | Pay |
 | POST | `/api/orders/{id}/refund` | Refund |
