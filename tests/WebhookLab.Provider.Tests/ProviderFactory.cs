@@ -7,6 +7,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
+using WebhookLab.Provider.Chaos;
 using WebhookLab.Provider.Data;
 
 namespace WebhookLab.Provider.Tests;
@@ -28,6 +29,9 @@ public sealed class ProviderFactory : WebApplicationFactory<Program>
     private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"provider-test-{Guid.NewGuid():N}.db");
 
     public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 10, 8, 10, 0, 0, TimeSpan.Zero));
+
+    public ChaosSettings Chaos => Services.GetRequiredService<ChaosSettings>();
+    public ReorderBuffer Reorder => Services.GetRequiredService<ReorderBuffer>();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
