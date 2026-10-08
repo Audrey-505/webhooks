@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Hosting;
@@ -7,6 +8,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
+using WebhookLab.Provider.Api;
 using WebhookLab.Provider.Chaos;
 using WebhookLab.Provider.Data;
 
@@ -45,6 +47,20 @@ public sealed class ProviderFactory : WebApplicationFactory<Program>
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(Time);
         });
+    }
+
+    public async Task<OrderActionResponse> CreateOrderAsync(decimal amount = 50m)
+    {
+        var response = await CreateClient().PostAsJsonAsync("/api/orders", new CreateOrderRequest(amount));
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<OrderActionResponse>(Json))!;
+    }
+
+    public async Task<OrderActionResponse> PayAsync(int orderId)
+    {
+        var response = await CreateClient().PostAsync($"/api/orders/{orderId}/pay", null);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<OrderActionResponse>(Json))!;
     }
 
     public async Task<T> WithDbAsync<T>(Func<ProviderDbContext, Task<T>> query)

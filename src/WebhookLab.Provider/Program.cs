@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using WebhookLab.Provider.Api;
 using WebhookLab.Provider.Chaos;
 using WebhookLab.Provider.Data;
+using WebhookLab.Provider.Orders;
+using WebhookLab.Provider.Realtime;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +13,10 @@ builder.Services.AddDbContext<ProviderDbContext>(options =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ChaosSettings>();
 builder.Services.AddSingleton<ReorderBuffer>();
+builder.Services.AddScoped<OrderService>();
+builder.Services.AddSingleton<ProviderNotifier>();
+builder.Services.AddSignalR().AddJsonProtocol(options =>
+    options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
@@ -29,6 +35,8 @@ using (var scope = app.Services.CreateScope())
 app.UseCors();
 app.MapQueryEndpoints();
 app.MapLabControlEndpoints();
+app.MapOrderEndpoints();
+app.MapHub<ProviderHub>("/hubs/provider");
 
 app.Run();
 
